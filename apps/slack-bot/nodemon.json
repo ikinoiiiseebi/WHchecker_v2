@@ -1,0 +1,5 @@
+{
+  "watch": ["app.ts", "../../packages/analyzer/*.ts"],
+  "ext": "ts",
+  "exec": "tsx app.ts"
+}
