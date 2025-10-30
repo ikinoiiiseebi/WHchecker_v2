@@ -1,0 +1,21 @@
+{
+  "name": "whchecker-monorepo",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "pnpm -C apps/slack-bot dev",
+    "build": "pnpm -r build"
+  },
+  "dependencies": {
+    "dotenv": "^16.6.1",
+    "openai": "^4.104.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.9.2",
+    "tsx": "^4.20.6"
+  }
+}
