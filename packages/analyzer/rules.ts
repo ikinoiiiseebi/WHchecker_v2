@@ -2,15 +2,15 @@ import { FiveW1HKey, FiveW1HKeys, MissingItem, RuleMatch } from "./schema";
 
 const jp = {
   ambiguous: [
-    { phrase: "まあ、いいけど", reason: "納得しているのか不明で不安を与える" },
-    { phrase: "あとで話そう", reason: "相手がいつか分からず不明確" },
+    { phrase: "まあ、いいよ", reason: "納得しているのか不明で不安を与える" },
+    { phrase: "あとで話そう", reason: "相手がいつか分からず不確か" },
     { phrase: "別に", reason: "感情を隠している印象で不安" },
-    { phrase: "なんでもない", reason: "理由を伏せている印象で不安" },
+    { phrase: "なんでもない", reason: "意図を伏せている印象で不安" },
     { phrase: "そう思うなら、それでいい", reason: "投げやり・突き放しに聞こえる" },
-    { phrase: "どうでもいい", reason: "拒絶的・関心がないと受け取られる" },
+    { phrase: "どうでもいい", reason: "拒絶的・非協力的に受け取られる" },
   ],
   negative: [
-    { phrase: "なんでそんなこともできないの", reason: "能力否定に受け取られる" },
+    { phrase: "なんでそんなこともできないの？", reason: "能力否定に受け取られる" },
     { phrase: "前も言ったよね", reason: "責められている印象" },
     { phrase: "普通はこうするでしょ", reason: "相手を普通ではないと示唆" },
     { phrase: "あなたのせいで", reason: "責任の押し付けに感じられる" },
@@ -21,16 +21,16 @@ const jp = {
 // Heuristic presence checks for 5W1H in Japanese business messages.
 const presenceRegex: Record<FiveW1HKey, RegExp[]> = {
   who: [
-    /(私|わたし|僕|自分|こちら)/, // speaker
+    /(私|わたし|僕|自分|こちら|あなた|相手|同僚|チーム)/, // speaker or role words
     /<@[^>]+>/, // Slack mention
-    /(さん|様|各位|チーム)/,
+    /(さん|様|氏)/,
   ],
   what: [
-    /(対応|実施|作成|提案|確認|連絡|共有|レビュー|修正|手配|準備)/,
+    /(対応|実施|作業|提案|確認|連絡|共有|レビュー|修正|手配|準備)/,
     /(資料|見積|見積書|報告|依頼|タスク|案件)/,
   ],
   when: [
-    /(\d{1,2}\s*時|\d{1,2}\s*日|\d{1,2}\s*月)/,
+    /(\d{1,2}\s*月\s*\d{1,2}\s*日|\d{1,2}\s*日)/,
     /(今日|明日|明後日|今週|来週|今月|来月)/,
     /(まで|頃|までに|期日|期限)/,
   ],
@@ -58,19 +58,19 @@ export function detectMissing5W1H(text: string): MissingItem[] {
       let reason = "";
       switch (key) {
         case "who":
-          reason = "誰が実施するかが明確ではありません";
+          reason = "宛先が不明です（@誰々 を付けて明記してください）";
           break;
         case "what":
           reason = "具体的に何をするかが不明です";
           break;
         case "when":
-          reason = "期限や時期が明記されていません";
+          reason = "期限や日時が明記されていません";
           break;
         case "where":
-          reason = "場所や手段(会議URL等)が不明です";
+          reason = "場所や手段(会議URLなど)が不明です";
           break;
         case "why":
-          reason = "目的・背景が示されていません";
+          reason = "目的や背景が示されていません";
           break;
         case "how":
           reason = "方法やフォーマットが不明です";
@@ -80,8 +80,8 @@ export function detectMissing5W1H(text: string): MissingItem[] {
     }
   }
 
-  // Heuristic reliefs: if the text is clearly casual chat, avoid over-flagging
-  if (/^(ありがとう|お疲れさま|おはよう|こんにちは|こんばんは)/.test(text.trim())) {
+  // Heuristic reliefs: clearly casual greetings → avoid flagging
+  if (/^(ありがとうございます|お疲れさま|おはよう|こんにちは|こんばんは)/.test(text.trim())) {
     return [];
   }
 
@@ -103,4 +103,3 @@ export function detectPhrases(text: string): RuleMatch[] {
   }
   return matches;
 }
-

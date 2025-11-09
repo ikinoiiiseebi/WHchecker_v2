@@ -31,6 +31,12 @@ export const SuggestionSchema = z.object({
 // Alias for LLM findings JSON schema expected by analyzer/llm.ts
 export const FindingsSchema = SuggestionSchema;
 
+export const NotificationScoreSchema = z.object({
+  score: z.number().min(0).max(10),
+  shouldNotify: z.boolean(),
+  reasons: z.array(z.string()).default([]),
+});
+
 export const AnalysisResultSchema = z.object({
   missing: z.array(MissingItemSchema),
   matches: z.array(RuleMatchSchema),
@@ -39,6 +45,7 @@ export const AnalysisResultSchema = z.object({
     issueCount: z.number().int().nonnegative(),
   }),
   suggestion: SuggestionSchema.optional(),
+  notification: NotificationScoreSchema.optional(),
 });
 
 export type FiveW1HKey = typeof FiveW1HKeys[number];
@@ -46,3 +53,4 @@ export type RuleMatch = z.infer<typeof RuleMatchSchema>;
 export type MissingItem = z.infer<typeof MissingItemSchema>;
 export type Suggestion = z.infer<typeof SuggestionSchema>;
 export type AnalysisResult = z.infer<typeof AnalysisResultSchema>;
+export type NotificationScore = z.infer<typeof NotificationScoreSchema>;

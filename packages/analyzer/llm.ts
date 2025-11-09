@@ -1,72 +1,70 @@
-import OpenAI from "openai";
-import { Suggestion } from "./schema";
-import { FindingsSchema } from "./schema";
+import { SuggestionSchema, FiveW1HKeys, FiveW1HKey } from "./schema";
 
-type LlmInput = {
+export type SuggestWithLLMInput = {
   text: string;
-  missingKeys: string[];
+  missingKeys: FiveW1HKey[];
   ambiguousPhrases: string[];
   negativePhrases: string[];
 };
 
-export async function suggestWithLLM(input: LlmInput): Promise<Suggestion | undefined> {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return undefined;
-  const openai = new OpenAI({ apiKey });
+// Use Gemini (free tier) via @google/generative-ai
+export async function suggestWithLLM(input: SuggestWithLLMInput) {
+  const apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error("Missing GOOGLE_API_KEY (or GEMINI_API_KEY)");
+  }
 
-  const system =
-    "あなたは日本語のビジネスコミュニケーション改善アシスタントです。" +
-    "5W1Hの不足と不安を与える表現を踏まえて、相手に伝わる丁寧で具体的な提案文を1つだけ返してください。";
+  const { GoogleGenerativeAI } = await import("@google/generative-ai");
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-  const jsonSchema = {
-    name: "Suggestion",
-    schema: {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        rewrite: { type: "string", description: "改善後の提案文。1メッセージ分。" },
-        rationale: { type: "array", items: { type: "string" } },
-        improvedPoints: {
-          type: "array",
-          items: { type: "string", enum: ["who", "what", "when", "where", "why", "how"] },
-        },
-      },
-      required: ["rewrite"],
-    },
-  } as const;
+  const schemaHint = `必ず次のJSONスキーマに厳密に一致するJSONだけを返してください。余計な文章・注釈は禁止。
+{
+  "rewrite": string,                // そのまま送れる完成文（1〜2文）
+  "rationale": string[],            // 改善理由の箇条書き（短文）
+  "improvedPoints": ["who"|"what"|"when"|"where"|"why"|"how"]
+}`;
 
-  const prompt = [
-    `原文メッセージ: ${input.text}`,
-    `不足(5W1H): ${input.missingKeys.join(", ") || "なし"}`,
-    `曖昧表現: ${input.ambiguousPhrases.join(", ") || "なし"}`,
-    `否定/攻撃的表現: ${input.negativePhrases.join(", ") || "なし"}`,
-    "要件:",
-    "- 句読点・敬語を含む自然な文",
-    "- 具体的な期限や方法を補う（必要な場合）",
-    "- 1メッセージ、80〜180文字程度",
+  const sys = [
+    "あなたは日本語のビジネスチャット文面を、相手に伝わりやすく丁寧かつ実用的に書き直すアシスタントです。",
+    "5W1Hの不足を補い、依頼・期限・対象・手段が明確な“送信可能な完成文”を1〜2文で出力します。",
+    "宛先メンションが無い場合は文頭に『＠宛先』を付けてください（実在ユーザー名は創作しない）。",
+    "曖昧さを避け、Slackメッセージとして自然で簡潔な敬体で記述してください。",
   ].join("\n");
 
-  const res = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
-    messages: [
-      { role: "system", content: system },
-      { role: "user", content: prompt },
-    ],
-    response_format: { type: "json_object" },
+  const prompt = [
+    sys,
+    "\n【原文】\n" + input.text,
+    input.missingKeys.length
+      ? "\n【不足している5W1H】\n- " + input.missingKeys.join(", ")
+      : "",
+    input.ambiguousPhrases.length
+      ? "\n【曖昧表現】\n- " + input.ambiguousPhrases.join("\n- ")
+      : "",
+    input.negativePhrases.length
+      ? "\n【否定的/攻撃的に受け取られる可能性のある表現】\n- " +
+        input.negativePhrases.join("\n- ")
+      : "",
+    "\n" + schemaHint,
+    "\n出力はJSONのみ。'rewrite'はそのまま送れる形（箇条書き・プレースホルダ説明文を含めない）。",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const res = await model.generateContent({
+    contents: [{ role: "user", parts: [{ text: prompt }] }],
+    generationConfig: {
+      temperature: 0.2,
+      maxOutputTokens: 512,
+      // ask for JSON output; SDK accepts this in recent versions
+      responseMimeType: "application/json",
+    } as any,
   });
 
-  const text = res.choices?.[0]?.message?.content ?? undefined;
-  if (!text) return undefined;
-
-  const parsed = FindingsSchema.safeParse(safeJson(text));
-  if (parsed.success) return parsed.data;
-  return undefined;
-}
-
-function safeJson(s: string): unknown {
-  try {
-    return JSON.parse(s);
-  } catch {
-    return {};
+  const text = res.response.text() || "{}";
+  const parsed = SuggestionSchema.safeParse(JSON.parse(text));
+  if (!parsed.success) {
+    throw new Error("Failed to parse Gemini response into SuggestionSchema");
   }
+  return parsed.data;
 }
